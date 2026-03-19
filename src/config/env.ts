@@ -5,7 +5,8 @@ import { z } from 'zod';
 const envSchema = z.object ({
     DATABASE_URL: z.url(),
     PORT: z.coerce.number().default(3000),
-    HOST: z.string().default('0.0.0.0')
+    HOST: z.string().default('0.0.0.0'),
+    JWT_SECRET: z.string().min(1, "JWT_SECRET is required")
 });
 
 // Parse and validate the environment variables
