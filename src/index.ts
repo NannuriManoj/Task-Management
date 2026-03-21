@@ -4,6 +4,7 @@ import { env } from "./config/env.js";
 import jwtPlugin from "./plugins/jwt.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { projectsRoutes } from "./modules/projects/projects.routes.js"; 
+import { membersRoutes } from "./modules/members/members.routes.js";
 
 // Create a Fastify instance with logging enabled
 const app = fastify({ logger: true });
@@ -16,6 +17,9 @@ await app.register(authRoutes, { prefix: "/auth" });
 
 // Register project routes with a prefix of "/v1"
 await app.register(projectsRoutes, { prefix: "/v1" });
+
+// Register member routes with a prefix of "/v1"
+await app.register(membersRoutes, { prefix: "/v1" });
 
 // Define the structure of the JWT payload
 export interface JwtPayload {
