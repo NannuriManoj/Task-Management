@@ -1,33 +1,28 @@
 import fastify from "fastify";
 import { checkDbConnection } from "./config/databases.js";
 import { env } from "./config/env.js";
-import jwtPlugin from "./plugins/jwt.js";
-import { authRoutes } from "./modules/auth/auth.routes.js";
-import { projectsRoutes } from "./modules/projects/projects.routes.js"; 
-import { membersRoutes } from "./modules/members/members.routes.js";
 
-// Create a Fastify instance with logging enabled
+// Plugins
+import jwtPlugin from "./plugins/jwt.js";
+
+// Routes
+import { authRoutes } from "./modules/auth/auth.route.js";
+import { projectRoutes } from "./modules/projects/project.routes.js";
+import { memberRoutes } from "./modules/members/member.routes.js";
+import { taskRoutes } from "./modules/tasks/task.routes.js";
+
+// Create Fastify instance
 const app = fastify({ logger: true });
 
-//  Register Plugin 
+// Register Plugins
 await app.register(jwtPlugin);
 
-// Register authentication routes with a prefix of "/auth"
-await app.register(authRoutes, { prefix: "/auth" });
-
-// Register project routes with a prefix of "/v1"
-await app.register(projectsRoutes, { prefix: "/v1" });
-
-// Register member routes with a prefix of "/v1"
-await app.register(membersRoutes, { prefix: "/v1" });
-
-// Define the structure of the JWT payload
+// JWT Types
 export interface JwtPayload {
-    sub: string; // User ID
-    email: string; // User email
+    sub: string;
+    email: string;
 }
 
-// Extend the FastifyJWT interface to include our custom payload and user properties
 declare module "@fastify/jwt" {
     interface FastifyJWT {
         payload: JwtPayload;
@@ -35,21 +30,32 @@ declare module "@fastify/jwt" {
     }
 }
 
-// Define a simple health check route
-app.get("/health", async (request, reply) => {
+// Health Check
+app.get("/health", async () => {
     return { status: "OK" };
 });
 
+// Register Routes with API Versioning
+await app.register(authRoutes, { prefix: "/api" });
+
+await app.register(async function v1Routes(app) {
+    app.register(projectRoutes);
+    app.register(memberRoutes);
+    app.register(taskRoutes);
+}, { prefix: "/api/v1" });
+
+// Start Server
 const start = async () => {
     try {
-        // Check the database connection before starting the server
         await checkDbConnection();
 
-        // Start the server on port 3000
-        await app.listen({ port: env.PORT, host: "0.0.0.0" });
-        console.log("Server is running on http://localhost:" + env.PORT);
+        await app.listen({
+            port: env.PORT,
+            host: "0.0.0.0"
+        });
+        console.log(`Server running at http://localhost:${env.PORT}`);
     } catch (error) {
-        console.error("Error starting server:", error);
+        app.log.error(error);
         process.exit(1);
     }
 };
