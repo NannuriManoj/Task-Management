@@ -1,0 +1,28 @@
+# multi-stage build
+
+# stage-1
+FROM node:20-apline AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# stage-2
+FROM node:20-alpine as prod
+
+WORKDIR /app
+
+RUN apk add --no-cache postgresql-client
+
+COPY package*.json ./
+RUN npm ci --only=prod
+
+COPY --from=builder /app/dist ./dist
+
+EXPOSE 3000
+
+CMD [ "node","dist/index.js" ]
