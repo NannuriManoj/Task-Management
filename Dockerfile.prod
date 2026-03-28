@@ -19,10 +19,14 @@ WORKDIR /app
 RUN apk add --no-cache postgresql-client
 
 COPY package*.json ./
-RUN npm ci --only=prod
+RUN npm ci --omit=dev
+
+# copying the shell files to the binary executables in the virtual file system of the container
+COPY docker/wait-for-pg.sh /usr/local/bin/wait-for-pg
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint
+RUN chmod +x /usr/local/bin/wait-for-pg /usr/local/bin/entrypoint
 
 COPY --from=builder /app/dist ./dist
 
-EXPOSE 3000
-
+ENTRYPOINT ["entrypoint"]
 CMD [ "node","dist/index.js" ]

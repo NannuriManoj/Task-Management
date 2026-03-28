@@ -7,8 +7,12 @@ RUN apk add --no-cache postgresql-client
 COPY package*.json ./
 RUN npm ci
 
+# copying the shell files to the binary executables in the virtual file system of the container
+COPY docker/wait-for-pg.sh /usr/local/bin/wait-for-pg
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint
+RUN chmod +x /usr/local/bin/wait-for-pg /usr/local/bin/entrypoint
+
 COPY . .
 
-EXPOSE 3000
-
-CMD ["npm","run","dev"]
+ENTRYPOINT ["entrypoint"]
+CMD ["npm", "run", "dev"]
