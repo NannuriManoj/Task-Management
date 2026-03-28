@@ -159,13 +159,14 @@ export async function deleteTask(project_id: string, task_id: string, userId: st
         throw new Error("NOT_ALLOWED");
     }
 
+    // Log activity BEFORE deleting — task still exists at this point
+    await taskRepository.insertActivity(task_id, userId, project_id, "task_deleted");
+
     const deleted = await taskRepository.deleteTask(task_id, project_id);
 
     if (!deleted) {
         throw new Error("NOT_FOUND");
     }
-
-    await taskRepository.insertActivity(task_id, userId, project_id, "task_deleted");
 
     return;
 }

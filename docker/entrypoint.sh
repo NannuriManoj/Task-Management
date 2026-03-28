@@ -6,7 +6,7 @@ wait-for-pg
 
 echo "Running migrations..."
 
-if[ "$NODE_ENV" = "production" ]; then
+if [ "$NODE_ENV" = "production" ]; then
     node dist/db/migrate.js
 else
     npx tsx src/db/migrate.ts
