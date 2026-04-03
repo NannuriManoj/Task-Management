@@ -1,2 +1,19 @@
+# Node
+node_modules/
+
+# Build output
+dist/
+
+# Env files
 .env
-node_modules
+.env.*
+
+# Logs
+logs
+*.log
+
+# OS files
+.DS_Store
+
+# Docker
+docker-data/
