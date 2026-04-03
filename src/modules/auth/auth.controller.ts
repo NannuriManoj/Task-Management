@@ -4,7 +4,7 @@ import { registerSchema, loginSchema } from "./auth.schema.js";
 function handleError(reply: any, error: Error) {
     switch (error.message) {
         case "EMAIL_EXISTS":
-            return reply.status(400).send({ error: "Email already in use" });
+            return reply.status(409).send({ error: "Email already in use" });
         case "INVALID_CREDENTIALS":
             return reply.status(401).send({ error: "Invalid email or password" });
         case "CREATE_FAILED":
@@ -25,7 +25,7 @@ export async function register(request: any, reply: any) {
 
     try {
         const data = await authService.register(request.server, result.data);
-        return reply.status(201).send(data);
+        return reply.status(201).send({ token: data.token });
     } catch (error: any) {
         return handleError(reply, error);
     }
@@ -50,7 +50,11 @@ export async function login(request: any, reply: any) {
 export async function getMe(request: any, reply: any) {
     try {
         const user = await authService.getMe(request.user.sub);
-        return reply.send({ user });
+        return reply.send({             
+            id: user.id,
+            email: user.email,
+            name: user.name 
+        });
     } catch (error: any) {
         return handleError(reply, error);
     }
