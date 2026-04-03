@@ -1,0 +1,28 @@
+name: Setup Node
+description: Sets up Node.js, restores node_modules from cache, and runs npm ci if needed.
+inputs:
+  node-version:
+    description: Node.js version to use
+    required: false
+    default: '20'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@1d0ff469b13b175e42f4876af2bd532793f3bf47  # v4.2.0
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Restore node_modules cache
+      uses: actions/cache@d4323d4dc3a886b5f8a5d346ce4f29ac13db5fd8  # v4.2.2
+      id: cache
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+        restore-keys: |
+          node-modules-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci

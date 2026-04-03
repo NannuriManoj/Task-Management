@@ -1,0 +1,135 @@
+# Task is a task runner used as a standardized entrypoint for all commands.
+# Both local development and CI use the same tasks — no drift between environments.
+version: '3'
+
+# Variables available to all tasks
+vars:
+  IMAGE_NAME: task-api
+
+# These environment variables are used by tasks that need them.
+# In CI, these are injected via GitHub Actions secrets/environments.
+# Locally, they come from your .env file.
+env:
+  NODE_ENV: '{{.NODE_ENV | default "development"}}'
+
+tasks:
+  # Dependencies
+
+  install:
+    desc: Install dependencies from lockfile exactly (no lockfile mutations)
+    cmds:
+      - npm ci
+    sources:
+      - package-lock.json
+    generates:
+      - node_modules/.package-lock.json
+    # Task's built-in up-to-date check: if package-lock.json hasn't changed
+    # since node_modules was last installed, skip this task entirely.
+    # Useful locally. In CI we always want a fresh install after cache restore,
+    # so CI calls `npm ci` directly after cache restore rather than `task install`.
+
+  # Code quality
+
+  typecheck:
+    desc: Run TypeScript compiler without emitting files - type errors only
+    cmds:
+      - npx tsc --noEmit
+    sources:
+      - src/**/*.ts
+      - tsconfig.json
+
+  lint:
+    desc: Run ESLint across all TypeScript source files
+    cmds:
+      - npx eslint "src/**/*.ts"
+    sources:
+      - src/**/*.ts
+      - .eslintrc.*
+      - eslint.config.*
+
+  lint:fix:
+    desc: Run ESLint and auto-fix fixable issues
+    cmds:
+      - npx eslint "src/**/*.ts" --fix
+
+  # Testing
+
+  test:
+    desc: Run all tests once - used in CI
+    cmds:
+      - npx vitest run
+    env:
+      NODE_ENV: test
+
+  test:watch:
+    desc: Run tests in watch mode (used locally during development)
+    cmds:
+      - npx vitest
+    env:
+      NODE_ENV: test
+
+  test:coverage:
+    desc: Run tests and generate a coverage report
+    cmds:
+      - npx vitest run --coverage
+    env:
+      NODE_ENV: test
+
+  # Build
+
+  build:
+    desc: Compile TypeScript source to dist/
+    cmds:
+      - npx tsc
+    sources:
+      - src/**/*.ts
+      - tsconfig.json
+    generates:
+      - dist/**/*.js
+
+  build:clean:
+    desc: Remove dist/ and rebuild from scratch
+    cmds:
+      - rm -rf dist
+      - task: build
+
+  # Docker
+
+  docker:build:
+    desc: Build the Docker image locally for testing
+    cmds:
+      - docker build -t {{.IMAGE_NAME}}:local .
+
+  docker:run:
+    desc: Run the Docker image locally
+    cmds:
+      - docker run --rm --env-file .env -p 3000:3000 {{.IMAGE_NAME}}:local
+
+  # Database
+
+  migrate:
+    desc: Run pending database migrations
+    cmds:
+      - npm run migrate
+
+  # Composite tasks - used in CI pipeline stages
+
+  ci:typecheck:
+    desc: CI entrypoint for type checking
+    cmds:
+      - task: typecheck
+
+  ci:lint:
+    desc: CI entrypoint for linting
+    cmds:
+      - task: lint
+
+  ci:test:
+    desc: CI entrypoint for running tests
+    cmds:
+      - task: test
+
+  ci:build:
+    desc: CI entrypoint for building
+    cmds:
+      - task: build
