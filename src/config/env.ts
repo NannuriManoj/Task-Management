@@ -1,25 +1,26 @@
-import 'dotenv/config';
-import { z } from 'zod';
+import { z } from "zod";
+import { config } from "dotenv";
+import { existsSync } from "fs";
+import { resolve } from "path";
 
-// Define the schema for environment variables
-const envSchema = z.object ({
-    DATABASE_URL: z.url(),
-    PORT: z.coerce.number().default(3000),
-    HOST: z.string().default('0.0.0.0'),
-    JWT_SECRET: z.string().min(1, "JWT_SECRET is required")
-});
+// Load the right .env file synchronously before Zod parses.
+// Priority: .env.test (when NODE_ENV=test) → .env → already-set process.env
+const envFile =
+  process.env.NODE_ENV === "test"
+    ? resolve(process.cwd(), ".env.test")
+    : resolve(process.cwd(), ".env");
 
-// Parse and validate the environment variables
-const parsed = envSchema.safeParse(process.env);
-
-// If parsing fails, log the errors and exit the process
-if(!parsed.success){
-    console.error("Missing or invalid environment variables");
-    // Log each validation issue
-    for (const issue of parsed.error.issues) {
-        console.error(`- ${issue.path.join('.')} : ${issue.message}`);
-    }
-    process.exit(1);
+if (existsSync(envFile)) {
+  // override: false means already-set env vars (e.g. from a real CI environment)
+  // take precedence over the file — safe for both local dev and CI
+  config({ path: envFile, override: false });
 }
 
-export const env = parsed.data;
+const envSchema = z.object({
+  DATABASE_URL: z.url(),
+  PORT: z.coerce.number().default(3000),
+  HOST: z.string().default("0.0.0.0"),
+  JWT_SECRET: z.string().min(32),
+});
+
+export const env = envSchema.parse(process.env);
