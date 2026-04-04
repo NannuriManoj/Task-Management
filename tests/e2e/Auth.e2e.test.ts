@@ -55,7 +55,7 @@ describe("E2E — Auth flow", () => {
 
   it("registers, logs in, and fetches profile", async () => {
     // 1. Register
-    const register = await api("/auth/register", {
+    const register = await api("/api/auth/register", {
       method: "POST",
       body: JSON.stringify({
         email: "dave@example.com",
@@ -67,7 +67,7 @@ describe("E2E — Auth flow", () => {
     expect(register.body).toHaveProperty("token");
 
     // 2. Login
-    const login = await api("/auth/login", {
+    const login = await api("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({
         email: "dave@example.com",
@@ -79,7 +79,7 @@ describe("E2E — Auth flow", () => {
     expect(typeof token).toBe("string");
 
     // 3. Fetch profile
-    const me = await api("/auth/me", {
+    const me = await api("/api/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(me.status).toBe(200);

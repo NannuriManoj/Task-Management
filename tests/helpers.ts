@@ -35,7 +35,7 @@ export async function seedUser(
 ) {
   const email = overrides.email ?? "test@example.com";
   const name = overrides.name ?? "Test User";
-  // bcrypt hash of "password123" with saltRounds=10
+  // bcrypt hash of "password" with saltRounds=10
   const password_hash =
     overrides.password_hash ??
     "$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi."; // "password"

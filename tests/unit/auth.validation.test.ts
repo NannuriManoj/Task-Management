@@ -10,18 +10,7 @@ import Fastify from "fastify";
 import fastifyJwt from "@fastify/jwt";
 import { z } from "zod";
 
-// ─── Minimal schemas (mirrors what auth.routes.ts should use) ─────────────────
-
-const RegisterSchema = z.object({
-  email: z.email(),
-  password: z.string().min(8),
-  name: z.string().min(1),
-});
-
-const LoginSchema = z.object({
-  email: z.email(),
-  password: z.string().min(1),
-});
+import { registerSchema as RegisterSchema, loginSchema as LoginSchema } from "../../src/modules/auth/auth.schema.js";
 
 // ─── Inline minimal route handlers for validation testing ─────────────────────
 

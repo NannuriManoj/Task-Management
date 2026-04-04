@@ -42,7 +42,6 @@ describe("GET /health", () => {
 
   afterAll(async () => {
     await app.close();
-    await dbPool.end();
   });
 
   it("returns 200 with status ok", async () => {

@@ -15,7 +15,6 @@ describe("Auth routes — integration", () => {
 
   afterAll(async () => {
     await app.close();
-    await dbPool.end();
   });
 
   beforeEach(async () => {
