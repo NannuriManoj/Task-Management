@@ -195,6 +195,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile.prod
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/task-api:${{ steps.tag.outputs.value }}
