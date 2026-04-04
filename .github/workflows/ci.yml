@@ -200,9 +200,8 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/task-api:${{ steps.tag.outputs.value }}
             ${{ secrets.DOCKERHUB_USERNAME }}/task-api:latest
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/task-api:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/task-api:buildcache,mode=max
-
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Push summary
         run: |
           echo "### Docker image pushed" >> $GITHUB_STEP_SUMMARY
