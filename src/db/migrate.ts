@@ -3,6 +3,10 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const migrationsDir = path.join(__dirname, "migrations");
+
 export async function runMigrations() {
   const client = await dbPool.connect();
 
@@ -47,10 +51,8 @@ export async function runMigrations() {
 
 // Only run when executed directly (npm run migrate / npm run migrate:test)
 // NOT when imported by tests
-const isMain =
-  process.argv[1] === fileURLToPath(import.meta.url) ||
-  process.argv[1]?.endsWith("migrate.ts") ||
-  process.argv[1]?.endsWith("migrate.js");
+// clean
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 
 if (isMain) {
   runMigrations().catch((err) => {
