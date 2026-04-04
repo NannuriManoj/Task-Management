@@ -57,28 +57,28 @@ tasks:
   test:
     desc: Run all tests once - used in CI
     cmds:
-      - npx vitest run --config vitest.config.ts
+      - npx vitest run --config tests/vitest.config.ts
     env:
       NODE_ENV: test
 
   test:watch:
     desc: Run tests in watch mode (used locally during development)
     cmds:
-      - npx vitest
+      - npx vitest --config tests/vitest.config.ts
     env:
       NODE_ENV: test
 
   test:coverage:
     desc: Run tests and generate a coverage report
     cmds:
-      - npx vitest run --coverage
+      - npx vitest run --coverage --config tests/vitest.config.ts
     env:
       NODE_ENV: test
-      
+
   test:e2e:
     desc: E2E tests — requires a running server on $E2E_BASE_URL
     cmds:
-      - npx vitest run --config vitest.config.e2e.ts
+      - npx vitest run --config tests/e2e/vitest.config.e2e.ts
     env:
       NODE_ENV: test
 
