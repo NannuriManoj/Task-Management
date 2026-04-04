@@ -7,18 +7,16 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-
     "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
     "docker:dev:db": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres",
     "docker:prod": "docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build",
     "docker:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v",
-
-    "migrate":       "tsx src/db/migrate.ts",
-    "migrate:test":  "NODE_ENV=test tsx src/db/migrate.ts",
-    "test":          "NODE_ENV=test vitest run",
-    "test:watch":    "NODE_ENV=test vitest",
+    "migrate": "tsx src/db/migrate.ts",
+    "migrate:test": "NODE_ENV=test tsx src/db/migrate.ts",
+    "test": "NODE_ENV=test vitest run",
+    "test:watch": "NODE_ENV=test vitest",
     "test:coverage": "NODE_ENV=test vitest run --coverage",
-    "test:e2e":      "NODE_ENV=test vitest run --config vitest.config.e2e.ts"
+    "test:e2e": "NODE_ENV=test vitest run --config vitest.config.e2e.ts"
   },
   "keywords": [],
   "author": "",
@@ -28,8 +26,11 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^25.5.0",
     "@types/pg": "^8.18.0",
+    "@typescript-eslint/eslint-plugin": "^8.58.0",
+    "@typescript-eslint/parser": "^8.58.0",
     "@vitest/coverage-v8": "^4.1.2",
     "dotenv": "^17.4.0",
+    "eslint": "^10.2.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.2"
