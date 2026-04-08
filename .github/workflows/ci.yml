@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev
+      - staging
       - 'feature/**'
     paths-ignore:
       - '**.md'
