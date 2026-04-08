@@ -1,11 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import * as authController from "./auth.controller.js";
 import { authenticate } from "../../middleware/authenticate.js";
+import { createRateLimiter } from "../../middleware/perRouteRateLimit.js";
+
+const strictLimiter = createRateLimiter({ prefix: "auth", limit: 10, windowSeconds: 900 });
 
 export async function authRoutes(fastify: FastifyInstance) {
 
-    fastify.post("/auth/register", authController.register);
-    fastify.post("/auth/login", authController.login);
+    fastify.post("/auth/register", { preHandler: strictLimiter } ,authController.register);
+    fastify.post("/auth/login", { preHandler: strictLimiter } ,authController.login);
 
     fastify.get(
         "/auth/me",
