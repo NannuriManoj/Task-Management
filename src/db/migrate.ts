@@ -20,7 +20,7 @@ export async function runMigrations() {
       )
     `);
 
-    const migrationsDir = path.join(process.cwd(), "src/db/migrations");
+    // removed the duplicate migrationsDir declaration here
     const files = fs.readdirSync(migrationsDir).sort();
 
     for (const file of files) {
@@ -31,7 +31,6 @@ export async function runMigrations() {
 
       if (rows.length === 0) {
         console.log(`Applying migration: ${file}`);
-
         const sql = fs.readFileSync(path.join(migrationsDir, file), "utf-8");
         await client.query(sql);
         await client.query("INSERT INTO _migrations (name) VALUES ($1)", [file]);
@@ -49,9 +48,6 @@ export async function runMigrations() {
   }
 }
 
-// Only run when executed directly (npm run migrate / npm run migrate:test)
-// NOT when imported by tests
-// clean
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 
 if (isMain) {
