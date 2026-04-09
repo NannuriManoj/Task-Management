@@ -1,12 +1,21 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 
 import { buildApp } from "../../src/app.js";
 import { dbPool } from "../../src/config/databases.js";
 import { clearDatabase } from "../helpers.js";
+import redis from "../../src/config/redis.js";
 
 describe("Auth routes — integration", () => {
   let app: FastifyInstance;
+
+  afterEach(async () => {
+  // clear all rate limit keys between tests
+  const keys = await redis.keys("ratelimit:sliding:*");
+  if (keys.length > 0) {
+    await redis.del(...keys);
+  }
+});
 
   beforeAll(async () => {
     app = await buildApp();
@@ -143,8 +152,7 @@ describe("Auth routes — integration", () => {
         payload: { email: "not-an-email", password: "abc" },
       });
 
-      // temp change
-      expect(res.statusCode).toBe(201);
+      expect(res.statusCode).toBe(400);
     });
   });
 
@@ -180,9 +188,7 @@ describe("Auth routes — integration", () => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // temp change
-      console.log(res.body);
-      expect(res.statusCode).toBe(201);
+      expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body.email).toBe("carol@example.com");
       expect(body.name).toBe("Carol");
