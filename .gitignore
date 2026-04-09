@@ -17,3 +17,6 @@ logs
 
 # Docker
 docker-data/
+
+#Redis
+redis/acl.conf

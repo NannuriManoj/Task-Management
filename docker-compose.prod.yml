@@ -20,7 +20,11 @@ services:
     container_name: task_api_redis_prod
     volumes:
       - redis_data_prod:/data
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+      - ./redis/acl.conf:/etc/redis/acl.conf
+    command: redis-server --appendonly yes --aclfile /etc/redis/acl.conf
+    environment:
+      REDIS_USERNAME: ${REDIS_USERNAME}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
 
   api:
     container_name: task_api_app_prod
@@ -36,6 +40,7 @@ services:
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_USERNAME: ${REDIS_USERNAME}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
   
 volumes:

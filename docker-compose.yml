@@ -13,7 +13,7 @@ services:
   redis:
     image: redis:7-alpine
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ['CMD', 'redis-cli', '-u', 'redis://${REDIS_USERNAME}:${REDIS_PASSWORD}@localhost:6379', 'ping']
       interval: 5s
       timeout: 5s
       retries: 10
