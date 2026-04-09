@@ -16,6 +16,12 @@ services:
       retries: 10
       start_period: 10s
 
+  redis:
+    container_name: task_api_redis_prod
+    volumes:
+      - redis_data_prod:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+
   api:
     container_name: task_api_app_prod
     build:
@@ -28,6 +34,10 @@ services:
       NODE_ENV: production
       POSTGRES_USER: ${PROD_POSTGRES_USER}
       POSTGRES_HOST: postgres
-
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+  
 volumes:
   postgres_data_prod:
+  redis_data_prod:

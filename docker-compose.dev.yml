@@ -17,6 +17,14 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  redis:
+    container_name: task_api_redis_dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+
   api:
     container_name: task_api_app_dev
     build:
@@ -29,6 +37,8 @@ services:
       NODE_ENV: development
       POSTGRES_USER: ${DEV_POSTGRES_USER}
       POSTGRES_HOST: postgres 
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     ports:
       - "3000:3000"
     volumes:
@@ -37,3 +47,4 @@ services:
 
 volumes:
   postgres_data_dev:
+  redis_data_dev:
