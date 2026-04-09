@@ -9,20 +9,24 @@ interface RateLimiterOptions {
 
 export function createRateLimiter({ prefix, limit, windowSeconds }: RateLimiterOptions) {
   return async function (request: FastifyRequest, reply: FastifyReply): Promise<void> {
-    const identifier = (request.user?.sub as string) || request.ip;
+    try {
+      const identifier = (request.user?.sub as string) || request.ip;
+      const results = await slidingWindowRateLimit(
+        `${prefix}:${identifier}`,
+        limit,
+        windowSeconds
+      );
 
-    const results = await slidingWindowRateLimit(
-      `${prefix}:${identifier}`,
-      limit,
-      windowSeconds
-    );
-
-    if (!results.allowed) {
-      return reply.code(429).send({
-        error: 'Too many requests',
-        message: `Try again in ${results.retryAfter} seconds`,
-        retryAfter: results.retryAfter,
-      });
+      if (!results.allowed) {
+        return reply.code(429).send({
+          error: 'Too many requests',
+          message: `Try again in ${results.retryAfter} seconds`,
+          retryAfter: results.retryAfter,
+        });
+      }
+    } catch (err) {
+      // Redis unavailable — fail open, log and continue
+      request.log.error({ err }, 'Rate limiter error, allowing request through');
     }
   };
 }
