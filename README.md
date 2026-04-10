@@ -439,4 +439,4 @@ Each doc covers design decisions and technical implementation in depth for its s
 |---|---|
 | [`docs/Redis.md`](docs/Redis.md) | Caching architecture, `withCache`, cache key design, invalidation strategy, ACL, testing |
 | [`docs/Docker.md`](docs/Docker.md) | Dockerfile design, compose file strategy, entrypoint, boot sequence, dev vs prod differences |
-| [`docs/CI-Pipeline.md`](docs/CI.md) | Pipeline structure, job breakdown, reusable workflows, security decisions, branch behaviour |
+| [`docs/CI-Pipeline.md`](docs/CI-Pipeline.md) | Pipeline structure, job breakdown, reusable workflows, security decisions, branch behaviour |
