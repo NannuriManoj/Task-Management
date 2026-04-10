@@ -1,14 +1,15 @@
 // src/index.ts
 import { buildApp } from "./app.js";
 import { checkDbConnection } from "./config/databases.js";
+import { checkRedisConnection } from "./config/redis.js";
 import { env } from "./config/env.js";
 
 export const start = async () => {
     try {
         await checkDbConnection();
+        await checkRedisConnection();
 
         const app = await buildApp();
-
         await app.listen({
             port: env.PORT,
             host: "0.0.0.0",

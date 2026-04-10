@@ -1,5 +1,10 @@
 import bcrypt from "bcryptjs";
 import * as authRepository from "./auth.repository.js";
+import { withCache } from "../../plugins/cache.js";
+
+const cacheKeys = {
+  user: (userId: string) => `cache:user:${userId}`,
+};
 
 // REGISTER
 export async function register(fastify: any, data: any) {
@@ -49,7 +54,11 @@ export async function login(fastify: any, data: any) {
 
 // GET CURRENT USER
 export async function getMe(userId: string) {
-    const user = await authRepository.getUserById(userId);
+    const user = await withCache(
+        cacheKeys.user(userId),
+        60, // TTL
+        () => authRepository.getUserById(userId)
+    )
     if (!user) throw new Error("NOT_FOUND");
     return user;
 }

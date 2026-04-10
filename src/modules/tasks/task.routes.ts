@@ -1,50 +1,53 @@
 import type { FastifyInstance } from "fastify";
 import * as taskController from "./task.controller.js";
 import { authenticate } from "../../middleware/authenticate.js";
+import { createRateLimiter } from "../../middleware/perRouteRateLimit.js";
+
+const readLimiter  = createRateLimiter({ prefix: "tasks-read",  limit: 120, windowSeconds: 60 });
+const writeLimiter = createRateLimiter({ prefix: "tasks-write", limit: 30,  windowSeconds: 60 });
 
 export async function taskRoutes(fastify: FastifyInstance): Promise<void> {
-    // All task routes require authentication
     fastify.addHook("preHandler", authenticate);
 
-    // GET all tasks (with filters)
     fastify.get(
         "/projects/:project_id/tasks",
+        { preHandler: readLimiter },
         taskController.getTasks
     );
 
-    // GET single task
     fastify.get(
         "/projects/:project_id/tasks/:task_id",
+        { preHandler: readLimiter },
         taskController.getTaskById
     );
 
-    // CREATE task
     fastify.post(
         "/projects/:project_id/tasks",
+        { preHandler: writeLimiter },
         taskController.createTask
     );
 
-    // UPDATE task
     fastify.patch(
         "/projects/:project_id/tasks/:task_id",
+        { preHandler: writeLimiter },
         taskController.updateTask
     );
 
-    // DELETE task
     fastify.delete(
         "/projects/:project_id/tasks/:task_id",
+        { preHandler: writeLimiter },
         taskController.deleteTask
     );
 
-    // GET my tasks
     fastify.get(
         "/tasks/my",
+        { preHandler: readLimiter },
         taskController.getMyTasks
     );
 
-    // GET task activity
     fastify.get(
         "/projects/:project_id/tasks/:task_id/activity",
+        { preHandler: readLimiter },
         taskController.getTaskActivity
     );
 }

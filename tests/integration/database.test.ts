@@ -4,11 +4,31 @@
  * Verifies the connection pool connects, runs queries, and that
  * the health check route reports the DB as reachable.
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 
 import { buildApp } from "../../src/app.js";
 import { dbPool } from "../../src/config/databases.js";
+
+// Mock Redis so the health check doesn't need a real Redis connection
+vi.mock("../../src/config/redis.js", () => ({
+  default: {
+    ping:   vi.fn().mockResolvedValue("PONG"),
+    get:    vi.fn().mockResolvedValue(null),
+    set:    vi.fn().mockResolvedValue("OK"),
+    del:    vi.fn().mockResolvedValue(1),
+    on:     vi.fn(),
+    connect: vi.fn().mockResolvedValue(undefined),
+  },
+  redis: {
+    ping:   vi.fn().mockResolvedValue("PONG"),
+    get:    vi.fn().mockResolvedValue(null),
+    set:    vi.fn().mockResolvedValue("OK"),
+    del:    vi.fn().mockResolvedValue(1),
+    on:     vi.fn(),
+    connect: vi.fn().mockResolvedValue(undefined),
+  },
+}));
 
 describe("Database connection", () => {
   it("can execute a simple query", async () => {

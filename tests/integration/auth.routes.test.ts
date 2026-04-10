@@ -1,12 +1,21 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 
 import { buildApp } from "../../src/app.js";
 import { dbPool } from "../../src/config/databases.js";
 import { clearDatabase } from "../helpers.js";
+import redis from "../../src/config/redis.js";
 
 describe("Auth routes — integration", () => {
   let app: FastifyInstance;
+
+  afterEach(async () => {
+  // clear all rate limit keys between tests
+  const keys = await redis.keys("ratelimit:sliding:*");
+  if (keys.length > 0) {
+    await redis.del(...keys);
+  }
+});
 
   beforeAll(async () => {
     app = await buildApp();
