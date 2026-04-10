@@ -1,6 +1,8 @@
 // src/app.ts
 import fastify from "fastify";
 import jwtPlugin from "./plugins/jwt.js";
+import { redis } from "./config/redis.js";
+import { dbPool } from "./config/databases.js";
 
 import { authRoutes } from "./modules/auth/auth.route.js";
 import { projectRoutes } from "./modules/projects/project.routes.js";
@@ -27,8 +29,29 @@ export async function buildApp() {
     await app.register(jwtPlugin);
 
     // Health Check
-    app.get("/health", async () => {
-        return { status: "ok" };
+    app.get("/health", async (request, reply) => {
+    const health = {
+        status:   "ok",
+        database: "ok",
+        redis:    "ok",
+    };
+
+    try {
+        await dbPool.query("SELECT 1");
+    } catch {
+        health.status   = "degraded";
+        health.database = "unreachable";
+    }
+
+    try {
+        await redis.ping();
+    } catch {
+        health.status = "degraded";
+        health.redis  = "unreachable";
+    }
+
+    const statusCode = health.status === "ok" ? 200 : 503;
+        return reply.code(statusCode).send(health);
     });
 
     // Routes
