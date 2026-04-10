@@ -1,14 +1,21 @@
 import { Redis } from "ioredis";
+import { env } from "./env.js"
 
 export const redis = new Redis({
-    host: process.env.REDIS_HOST || "localhost",
+    host: env.REDIS_HOST || "localhost",
     port: Number(process.env.REDIS_PORT) || 6379,
-    username: process.env.REDIS_USERNAME || undefined,
-    password: process.env.REDIS_PASSWORD || undefined,
+    username: env.REDIS_USERNAME || undefined,
+    password: env.REDIS_PASSWORD || undefined,
     lazyConnect: true,
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
 });
+
+export async function checkRedisConnection() {
+  await redis.connect();
+  await redis.ping();
+  console.log("Redis connection established");
+}
 
 redis.on("connect", () => {
     console.log("Connected to Redis");
