@@ -17,10 +17,12 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default("0.0.0.0"),
   JWT_SECRET: z.string().min(32),
-  REDIS_HOST:     z.string().min(1),
-  REDIS_PORT:     z.coerce.number().default(6379),
+  REDIS_HOST: z.string().min(1),
+  REDIS_PORT: z.coerce.number().default(6379),
   REDIS_USERNAME: z.string().optional(),
   REDIS_PASSWORD: z.string().optional(),
+  RESEND_API_KEY: z.string(),
+  EMAIL_FROM: z.string().min(1),
 });
 
 export const env = envSchema.parse(process.env);
