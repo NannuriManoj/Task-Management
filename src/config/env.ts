@@ -23,6 +23,7 @@ const envSchema = z.object({
   REDIS_PASSWORD: z.string().optional(),
   RESEND_API_KEY: z.string(),
   EMAIL_FROM: z.string().min(1),
+  APP_URL: z.url(),
 });
 
 export const env = envSchema.parse(process.env);
