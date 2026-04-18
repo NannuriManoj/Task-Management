@@ -18,7 +18,7 @@ const REMINDER_LEAD_TIME_MS = 24 * 60 * 60 * 1000; // notify before 24hrs
 
 export async function upsertDueRemainder(data: SchedulerJobData): Promise<void> {
     const jobId = `due-remainder:${data.taskId}`;
-    const dueData = new Date(data.dueData);
+    const dueData = new Date(data.dueDate);
     const delay = Math.max(0, dueData.getTime() - Date.now() - REMINDER_LEAD_TIME_MS);
 
     // remove the exisiting due dates, useful when due dates are changed.

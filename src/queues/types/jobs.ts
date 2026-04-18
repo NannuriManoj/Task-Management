@@ -86,7 +86,7 @@ export type SchedulerJobData = {
     assigneeId: string;
     assigneeEmail: string;
     assigneeName: string;
-    dueData: string;
+    dueDate: string;
 }
 
 // report queue
