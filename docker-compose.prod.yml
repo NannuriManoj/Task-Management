@@ -25,7 +25,12 @@ services:
     environment:
       REDIS_USERNAME: ${REDIS_USERNAME}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
   api:
     container_name: task_api_app_prod
     build:
@@ -42,6 +47,33 @@ services:
       REDIS_PORT: 6379
       REDIS_USERNAME: ${REDIS_USERNAME}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  
+  workers:
+    container_name: task_api_workers_prod
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: always
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_USERNAME: ${REDIS_USERNAME}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: ["ndoe", "dist/workers/index.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
   
 volumes:
   postgres_data_prod:

@@ -28,6 +28,10 @@ vi.mock("../../src/config/redis.js", () => ({
     on:     vi.fn(),
     connect: vi.fn().mockResolvedValue(undefined),
   },
+  bullMQRedis: {
+    on:      vi.fn(),
+    connect: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 describe("Database connection", () => {

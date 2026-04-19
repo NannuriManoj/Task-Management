@@ -147,6 +147,12 @@ jobs:
       - name: Build
         run: task ci:build
 
+      - name: Verify EntryPoints
+        run: |
+          test -f dist/index.js || (echo "dist/dist/index.js missing" && exit 1)
+          test -f dist/workers/index.js || (echo "dist/workers/index.js missing" && exit 1)
+          echo "Both entry points present"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1  # v4.6.1
         with:
