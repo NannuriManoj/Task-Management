@@ -3,6 +3,8 @@ import fastify from "fastify";
 import jwtPlugin from "./plugins/jwt.js";
 import { redis } from "./config/redis.js";
 import { dbPool } from "./config/databases.js";
+import { env } from "./config/env.js";
+import { registerBullBoard } from "./admin/bullboard.js";
 
 import { authRoutes } from "./modules/auth/auth.route.js";
 import { projectRoutes } from "./modules/projects/project.routes.js";
@@ -30,29 +32,34 @@ export async function buildApp() {
 
     // Health Check
     app.get("/health", async (request, reply) => {
-    const health = {
-        status:   "ok",
-        database: "ok",
-        redis:    "ok",
-    };
+        const health = {
+            status: "ok",
+            database: "ok",
+            redis: "ok",
+        };
 
-    try {
-        await dbPool.query("SELECT 1");
-    } catch {
-        health.status   = "degraded";
-        health.database = "unreachable";
-    }
+        try {
+            await dbPool.query("SELECT 1");
+        } catch {
+            health.status   = "degraded";
+            health.database = "unreachable";
+        }
 
-    try {
-        await redis.ping();
-    } catch {
-        health.status = "degraded";
-        health.redis  = "unreachable";
-    }
+        try {
+            await redis.ping();
+        } catch {
+            health.status = "degraded";
+            health.redis  = "unreachable";
+        }
 
-    const statusCode = health.status === "ok" ? 200 : 503;
+        const statusCode = health.status === "ok" ? 200 : 503;
         return reply.code(statusCode).send(health);
     });
+
+    // Bull Board — development only
+    if (env.NODE_ENV !== 'production') {
+        await registerBullBoard(app);
+    }
 
     // Routes
     await app.register(authRoutes, { prefix: "/api" });
