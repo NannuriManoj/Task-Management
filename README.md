@@ -1,12 +1,12 @@
 # Task Management API
 
-A production-style REST API for managing projects, members, and tasks. Built with **Fastify**, **TypeScript**, **PostgreSQL**, and **Redis**. No ORM, every query is raw SQL.
+A production-style REST API for managing projects, members, and tasks. Built with **Fastify**, **TypeScript**, **PostgreSQL**, **Redis**, and **BullMQ**. No ORM, every query is raw SQL.
 
 ---
 
 ## What this is
 
-A backend API that lets users register, create projects, invite collaborators, and manage tasks with role-based access control. Every design decision was made deliberately, there is a detailed explanation for each one in the docs listed below.
+A backend API that lets users register, create projects, invite collaborators, and manage tasks with role-based access control. Async side effects (emails, audit logs, scheduled reminders, report generation) are handled by background workers running as a separate process. Every design decision was made deliberately, there is a detailed explanation for each one in the docs listed below.
 
 ---
 
@@ -33,11 +33,13 @@ cp .env.example .env
 # 4. Run migrations
 npm run migrate
 
-# 5. Start dev server
-npm run dev
+# 5. Start dev server and workers (two terminals)
+npm run dev        # Terminal 1 — API server
+npm run workers    # Terminal 2 — Background workers
 ```
 
-Server starts at `http://localhost:3000`.
+Server starts at `http://localhost:3000`.  
+Bull Board dashboard at `http://localhost:3000/admin/queues` (development only).
 
 ### Docker (recommended)
 
@@ -48,6 +50,8 @@ npm run docker:dev
 # Production — multi-stage build, compiled output
 npm run docker:prod
 ```
+
+Both commands start the API server and workers as separate containers.
 
 ---
 
@@ -60,6 +64,8 @@ npm run docker:prod
 | Database | PostgreSQL 15 | Relational model fits permissions and joins well |
 | DB client | `pg` (node-postgres) | Raw SQL, no ORM abstraction |
 | Cache | Redis 7 + `ioredis` | In-memory read cache, reduces DB load on hot routes |
+| Queue | BullMQ + Redis | Async job processing, retries, scheduling, DLQ |
+| Email | Resend | Transactional email delivery via REST API |
 | Auth | `@fastify/jwt` | Stateless JWT, no session storage needed |
 | Passwords | `bcryptjs` | One-way hashing, safe to store |
 | Validation | `zod` | Runtime schema validation with TypeScript inference |
@@ -82,13 +88,26 @@ Routes          — define URL, HTTP method, attach middleware
 Controller      — validate input, call service, send response
   ↓
 Service         — business logic, permission checks, cache reads/writes
-  ↓
+  ↓             — enqueues async side effects after DB mutations
 Repository      — raw SQL queries, nothing else
   ↓
 PostgreSQL / Redis
+
+
+Async side effects (separate process)
+──────────────────────────────────────
+Service enqueues job
+  ↓
+BullMQ Queue (Redis)
+  ↓
+Worker picks up job
+  ↓
+Processor handles it (email / DB write / schedule / report)
+  ↓
+Retry on failure → DLQ after exhaustion
 ```
 
-This means: no SQL in controllers, no HTTP concepts in services, no permission checks in repositories. Each layer is independently testable and independently changeable.
+This means: no SQL in controllers, no HTTP concepts in services, no permission checks in repositories. Workers run in a completely separate process — a slow report job never blocks HTTP requests.
 
 ---
 
@@ -97,10 +116,12 @@ This means: no SQL in controllers, no HTTP concepts in services, no permission c
 ```
 task-api/
 ├── src/
+│   ├── admin/
+│   │   └── bull-board.ts           # Bull Board dashboard (dev only)
 │   ├── config/
 │   │   ├── databases.ts            # PostgreSQL connection pool
 │   │   ├── env.ts                  # Zod-validated env — crashes fast if anything missing
-│   │   └── redis.ts                # ioredis client + startup health check
+│   │   └── redis.ts                # ioredis clients — general + BullMQ
 │   ├── db/
 │   │   ├── migrations/             # SQL files, run in order, tracked in _migrations
 │   │   │   ├── 001_create_users.sql
@@ -121,6 +142,38 @@ task-api/
 │   ├── plugins/
 │   │   ├── cache.ts                # withCache utility
 │   │   └── jwt.ts                  # @fastify/jwt registration
+│   ├── queues/
+│   │   ├── config/
+│   │   │   └── defaults.ts         # Shared BullMQ job options
+│   │   ├── types/
+│   │   │   └── jobs.ts             # Typed payloads for every queue
+│   │   ├── utils/
+│   │   │   └── jitter.ts           # Randomized delay utility
+│   │   ├── notification.queue.ts
+│   │   ├── activity.queue.ts
+│   │   ├── scheduler.queue.ts      # + upsertDueReminder / cancelDueReminder helpers
+│   │   ├── report.queue.ts
+│   │   ├── dlq.queue.ts            # Dead letter queue
+│   │   └── index.ts                # Barrel — single import point for the rest of the app
+│   ├── services/
+│   │   └── email/
+│   │       ├── resend.ts           # Resend SDK wrapper
+│   │       └── templates/
+│   │           ├── base.ts         # Layout wrapper + reusable component helpers
+│   │           └── notifications.ts # One typed function per notification type
+│   ├── workers/
+│   │   ├── processors/
+│   │   │   ├── notification.processor.ts
+│   │   │   ├── activity.processor.ts
+│   │   │   ├── scheduler.processor.ts
+│   │   │   └── report.processor.ts
+│   │   ├── shared/
+│   │   │   └── dlq-handler.ts      # Reusable DLQ + logging handler
+│   │   ├── notification.worker.ts
+│   │   ├── activity.worker.ts
+│   │   ├── scheduler.worker.ts
+│   │   ├── report.worker.ts
+│   │   └── index.ts                # Worker entrypoint — separate from API server
 │   ├── app.ts                      # Fastify app builder — registers plugins and routes
 │   └── index.ts                    # Entry point — health checks, then starts server
 ├── redis/
@@ -144,7 +197,62 @@ task-api/
         └── ci-test.yml
 ```
 
-Each module follows the same internal structure: `routes → controller → service → repository → types`. You always know where to look.
+Each module follows the same internal structure: `routes → controller → service → repository → types`.
+
+---
+
+## Background jobs
+
+### Queues
+
+| Queue | Purpose | Concurrency | Retries |
+|---|---|---|---|
+| `notifications` | Sends transactional emails via Resend | 10 | 5 (exponential, 2s base) |
+| `activity` | Writes audit log entries to `task_activity` | 50 | 8 (exponential, 500ms base) |
+| `scheduler` | Fires delayed jobs for due date reminders | 5 | 3 (exponential, 5s base) |
+| `reports` | Generates CSV exports and emails download link | 2 | 3 (exponential, 10s base) |
+| `failed-jobs` | Dead letter queue — holds exhausted jobs for inspection | — | 1 (no auto-retry) |
+
+### Notification types
+
+| Type | Trigger | Recipients |
+|---|---|---|
+| `task_assigned` | Task is assigned to a user | Assignee |
+| `task_status_changed` | Task status changes | Creator + assignee (if different) |
+| `member_added` | User is added to a project | Added user |
+| `due_reminder` | 24 hours before a task's due date | Assignee |
+
+### How it works
+
+```
+HTTP request hits service layer
+  ↓
+DB mutation (source of truth)
+  ↓
+Queue jobs enqueued (fire and forget)
+  ↓
+Response returned to client immediately
+
+Meanwhile, in the worker process:
+  ↓
+Worker picks up job from Redis
+  ↓
+Processor executes (send email / write log / schedule / generate report)
+  ↓
+Success → job marked complete
+Failure → retry with exponential backoff
+Exhausted → forwarded to DLQ
+```
+
+### Bull Board
+
+A visual dashboard for monitoring all queues is available in development at:
+
+```
+http://localhost:3000/admin/queues
+```
+
+Shows waiting, active, completed, failed, and delayed jobs. Allows manual retry of failed jobs directly from the UI.
 
 ---
 
@@ -154,46 +262,47 @@ Each module follows the same internal structure: `routes → controller → serv
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| POST | `/auth/register` | No | Create account, returns JWT |
-| POST | `/auth/login` | No | Login, returns JWT |
-| GET | `/auth/me` | Yes | Get current user profile |
+| POST | `/api/auth/register` | No | Create account, returns JWT |
+| POST | `/api/auth/login` | No | Login, returns JWT |
+| GET | `/api/auth/me` | Yes | Get current user profile |
 
 ### Projects
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/projects` | Yes | List projects you belong to |
-| POST | `/projects` | Yes | Create a project |
-| GET | `/projects/:id` | Yes | Get a single project |
-| PATCH | `/projects/:id` | Yes (owner) | Update name or description |
-| DELETE | `/projects/:id` | Yes (owner) | Delete project and all its data |
+| GET | `/api/v1/projects` | Yes | List projects you belong to |
+| POST | `/api/v1/projects` | Yes | Create a project |
+| GET | `/api/v1/projects/:id` | Yes | Get a single project |
+| PATCH | `/api/v1/projects/:id` | Yes (owner) | Update name or description |
+| DELETE | `/api/v1/projects/:id` | Yes (owner) | Delete project and all its data |
 
 ### Members
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/projects/:id/members` | Yes (member) | List all members |
-| POST | `/projects/:id/members` | Yes (owner) | Invite a user by email |
-| DELETE | `/projects/:id/members/:userId` | Yes (owner) | Remove a member |
+| GET | `/api/v1/projects/:id/members` | Yes (member) | List all members |
+| POST | `/api/v1/projects/:id/members` | Yes (owner) | Invite a user by email |
+| DELETE | `/api/v1/projects/:id/members/:userId` | Yes (owner) | Remove a member |
 
 ### Tasks
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/projects/:id/tasks` | Yes (member) | List tasks — supports filters |
-| POST | `/projects/:id/tasks` | Yes (member) | Create a task |
-| GET | `/projects/:id/tasks/:taskId` | Yes (member) | Get a single task |
-| PATCH | `/projects/:id/tasks/:taskId` | Yes (member) | Update a task |
-| DELETE | `/projects/:id/tasks/:taskId` | Yes (creator/owner) | Delete a task |
-| GET | `/tasks/my` | Yes | All tasks assigned to you |
-| GET | `/projects/:id/tasks/:taskId/activity` | Yes (member) | Full activity history |
+| GET | `/api/v1/projects/:id/tasks` | Yes (member) | List tasks — supports filters |
+| POST | `/api/v1/projects/:id/tasks` | Yes (member) | Create a task |
+| GET | `/api/v1/projects/:id/tasks/:taskId` | Yes (member) | Get a single task |
+| PATCH | `/api/v1/projects/:id/tasks/:taskId` | Yes (member) | Update a task |
+| DELETE | `/api/v1/projects/:id/tasks/:taskId` | Yes (creator/owner) | Delete a task |
+| GET | `/api/v1/tasks/my` | Yes | All tasks assigned to you |
+| GET | `/api/v1/projects/:id/tasks/:taskId/activity` | Yes (member) | Full activity history |
 
 **Task filters:**
+
 ```
-GET /projects/:id/tasks?status=todo
-GET /projects/:id/tasks?priority=high
-GET /projects/:id/tasks?assigneeId=<uuid>
-GET /projects/:id/tasks?status=in_progress&priority=urgent&limit=20&offset=0
+GET /api/v1/projects/:id/tasks?status=todo
+GET /api/v1/projects/:id/tasks?priority=high
+GET /api/v1/projects/:id/tasks?assigneeId=<uuid>
+GET /api/v1/projects/:id/tasks?status=in_progress&priority=urgent&limit=20&offset=0
 ```
 
 ---
@@ -208,8 +317,11 @@ GET /projects/:id/tasks?status=in_progress&priority=urgent&limit=20&offset=0
 | `HOST` | No | Default: `0.0.0.0` |
 | `REDIS_HOST` | Yes | Redis hostname |
 | `REDIS_PORT` | No | Default: `6379` |
-| `REDIS_USERNAME` | Prod only | ACL username (`taskapi` in production) |
+| `REDIS_USERNAME` | Prod only | ACL username |
 | `REDIS_PASSWORD` | Prod only | Must match `redis/acl.conf` |
+| `RESEND_API_KEY` | Yes | Resend API key — get one at resend.com |
+| `EMAIL_FROM` | Yes | Sender address e.g. `Task API <noreply@yourdomain.com>` |
+| `APP_URL` | Yes | Base URL used in email links e.g. `https://app.yourdomain.com` |
 
 All variables are validated by Zod at startup. The server refuses to start if anything required is missing or malformed.
 
@@ -218,14 +330,16 @@ All variables are validated by Zod at startup. The server refuses to start if an
 ## Scripts
 
 ```bash
-npm run dev          # start with hot reload (tsx watch)
-npm run build        # compile TypeScript → dist/
-npm run start        # run compiled output
-npm run migrate      # apply pending SQL migrations
-npm test             # run test suite (Vitest)
-npm run docker:dev   # run dev environment in Docker
-npm run docker:prod  # run production environment in Docker
-npm run docker:down  # stop and remove containers
+npm run dev           # start API server with hot reload (tsx watch)
+npm run workers       # start worker process with hot reload
+npm run build         # compile TypeScript → dist/
+npm run start         # run compiled API server
+npm run start:workers # run compiled worker process
+npm run migrate       # apply pending SQL migrations
+npm test              # run test suite (Vitest)
+npm run docker:dev    # run dev environment in Docker
+npm run docker:prod   # run production environment in Docker
+npm run docker:down   # stop and remove containers
 ```
 
 ---
@@ -250,9 +364,10 @@ Routes return `404` (not `403`) when a non-member accesses a project. A `403` wo
 
 ---
 
-## Database Schema
+## Database schema
 
 ### `users`
+
 ```
 id            UUID         PK       DEFAULT uuid_generate_v4()
 email         VARCHAR(255) NOT NULL  UNIQUE
@@ -264,6 +379,7 @@ Index: idx_users_email (email)
 ```
 
 ### `projects`
+
 ```
 id          UUID         PK       DEFAULT uuid_generate_v4()
 owner_id    UUID         NOT NULL  FK → users.id  ON DELETE CASCADE
@@ -275,6 +391,7 @@ Index: idx_projects_owner_id (owner_id)
 ```
 
 ### `project_members`
+
 ```
 id         UUID      PK       DEFAULT uuid_generate_v4()
 project_id UUID      NOT NULL  FK → projects.id  ON DELETE CASCADE
@@ -289,6 +406,7 @@ Index: idx_project_members_user_id    (user_id)
 ```
 
 ### `tasks`
+
 ```
 id          UUID          PK       DEFAULT uuid_generate_v4()
 project_id  UUID          NOT NULL  FK → projects.id  ON DELETE CASCADE
@@ -303,7 +421,6 @@ priority    task_priority NOT NULL  DEFAULT 'medium'
 due_date    TIMESTAMPTZ
 created_at  TIMESTAMPTZ             DEFAULT CURRENT_TIMESTAMP
 updated_at  TIMESTAMPTZ             DEFAULT CURRENT_TIMESTAMP
-              -- auto-updated by set_updated_at trigger on every UPDATE
 
 Index: idx_tasks_project_id  (project_id)
 Index: idx_tasks_assignee_id (assignee_id)
@@ -312,24 +429,31 @@ Index: idx_tasks_priority    (priority)
 ```
 
 ### `task_activity`
+
 ```
-id         UUID        PK       DEFAULT uuid_generate_v4()
-task_id    UUID        NOT NULL  FK → tasks.id    ON DELETE CASCADE
-project_id UUID        NOT NULL  FK → projects.id ON DELETE CASCADE
-user_id    UUID        NOT NULL  FK → users.id
-action     TEXT        NOT NULL  -- e.g. 'created', 'status_changed', 'assigned', 'deleted'
-old_value  TEXT        NULLABLE  -- value before the change
-new_value  TEXT        NULLABLE  -- value after the change
-created_at TIMESTAMPTZ           DEFAULT NOW()
+id            UUID        PK       DEFAULT uuid_generate_v4()
+job_id        VARCHAR     UNIQUE             -- BullMQ job ID for idempotency
+task_id       UUID        NULLABLE  FK → tasks.id    ON DELETE CASCADE
+project_id    UUID        NOT NULL  FK → projects.id ON DELETE CASCADE
+actor_id      UUID        NULLABLE  FK → users.id    ON DELETE SET NULL
+actor_name    VARCHAR     NOT NULL           -- preserved if user is deleted
+action        VARCHAR     NOT NULL
+resource_type VARCHAR     NOT NULL           -- 'task' | 'project' | 'member'
+resource_id   UUID        NOT NULL
+meta          JSONB                          -- flexible per-action context
+occurred_at   TIMESTAMPTZ NOT NULL           -- when the action happened
+created_at    TIMESTAMPTZ NOT NULL  DEFAULT NOW()
 
-Index: idx_task_activity_task_id    (task_id)
-Index: idx_task_activity_user_id    (user_id)
-Index: idx_task_activity_created_at (project_id)
+Index: idx_task_activity_project_id   (project_id)
+Index: idx_task_activity_task_id      (task_id)
+Index: idx_task_activity_actor_id     (actor_id)
+Index: idx_task_activity_occurred_at  (occurred_at DESC)
+Index: idx_task_activity_project_time (project_id, occurred_at DESC)
 ```
 
-> `task_activity` is append-only. Rows are never updated, only inserted. This gives you a reliable audit trail of every change ever made to a task.
+> `task_activity` is append-only and idempotent. The `job_id` unique constraint ensures retried BullMQ jobs never produce duplicate audit entries. `actor_name` is stored alongside `actor_id` so the activity feed remains readable even if a user deletes their account.
 
-### Entity Relationships
+### Entity relationships
 
 ```
 users ──< projects              (one user owns many projects)
@@ -339,77 +463,8 @@ projects ──< tasks              (one project has many tasks)
 users ──< tasks                 (one user can be assigned many tasks)
 users ──< tasks                 (one user can create many tasks)
 tasks ──< task_activity         (one task has many activity log entries)
-users ──< task_activity         (one user can author many activity entries)
 projects ──< task_activity      (activity is scoped to a project)
 ```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- PostgreSQL 15+
-
-### Setup
-
-```bash
-# 1. Install dependencies
-npm install
-
-# 2. Create the database
-createdb task_api_dev
-
-# 3. Configure environment
-cp .env.example .env
-# Edit .env — set DATABASE_URL and JWT_SECRET at minimum
-
-# 4. Run all migrations
-npm run migrate
-
-# 5. Start the dev server
-npm run dev
-```
-
-Server starts at **http://localhost:3000**
-
----
-
-## 13. Design Decisions
-
-### Raw SQL over ORM
-
-Every database query in this project is a plain SQL string sent directly to PostgreSQL via `pg`. No Prisma, no TypeORM, no Drizzle.
-
-The reasons:
-- **Full visibility** — you see exactly what hits the database, no generated queries to decode
-- **No abstraction ceiling** — complex joins, CTEs, window functions, `EXPLAIN ANALYZE` all work without fighting the ORM
-- **Real SQL knowledge** — the skill transfers to any language or database
-
-The trade-off is more boilerplate for simple queries. The `db.query<T>(sql, params)` pattern with an explicit type parameter is the middle ground — you get TypeScript types without losing visibility into the query itself.
-
-### Layered architecture
-
-Each module has five files with fixed responsibilities: `routes → controller → service → repository → types`. Nothing bleeds across layers, a repository never checks permissions, a service never touches `reply.send()`. This makes every file predictable and every function independently testable.
-
-### Append-only activity log
-
-`task_activity` rows are never updated, only inserted. Every status change, reassignment, or edit creates a new row with the old and new values. This gives you a reliable audit trail that can answer "who changed this, and from what to what" for any task at any point in its history.
-
-### Validation at the boundary
-
-Zod schemas sit at the edge of the system, in controllers, before anything touches the database. Invalid input is rejected with a clear error immediately. Nothing downstream needs to defensively check for null or undefined.
-
-The same pattern applies to environment variables at startup. If `DATABASE_URL` is missing, the server exits immediately with a readable error — not a cryptic crash when the first query runs.
-
-### Transactions for multi-step writes
-
-Any operation that touches more than one table is wrapped in a `BEGIN / COMMIT / ROLLBACK` block. The clearest example is creating a project — two inserts happen (into `projects` and `project_members`). If the second fails, the first is rolled back. The database never ends up in a half-written state.
-
-### 404 instead of 403 for inaccessible resources
-
-When a non-member tries to access a project, the API returns `404 Not Found`, not `403 Forbidden`. A `403` would confirm that a project with that ID exists — which is information an outsider shouldn't have. The `404` response is identical whether the project doesn't exist or the user just has no access.
 
 ---
 
@@ -431,6 +486,57 @@ Returns `200` when both PostgreSQL and Redis are reachable. Returns `503` with a
 
 ---
 
+## Design decisions
+
+### Raw SQL over ORM
+
+Every database query in this project is a plain SQL string sent directly to PostgreSQL via `pg`. No Prisma, no TypeORM, no Drizzle.
+
+The reasons:
+- **Full visibility** — you see exactly what hits the database, no generated queries to decode
+- **No abstraction ceiling** — complex joins, CTEs, window functions, `EXPLAIN ANALYZE` all work without fighting the ORM
+- **Real SQL knowledge** — the skill transfers to any language or database
+
+### Layered architecture
+
+Each module has five files with fixed responsibilities: `routes → controller → service → repository → types`. Nothing bleeds across layers, a repository never checks permissions, a service never touches `reply.send()`. This makes every file predictable and every function independently testable.
+
+### Workers as a separate process
+
+The API server and worker process are intentionally separate. A CPU-heavy report job won't block HTTP request handling. Workers can be scaled independently. Deploying the API doesn't interrupt in-flight jobs. Both run from the same Docker image with a different `command`.
+
+### Queue-per-concern
+
+Each queue has its own concurrency limit, retry config, and backoff strategy tuned to what that queue actually does. Activity logs retry aggressively with short delays (lightweight DB inserts). Reports retry conservatively with long delays (heavy CPU work). Notification retries start at 2s to avoid hammering Resend on the first failure.
+
+### Idempotent activity logs
+
+Every `INSERT` into `task_activity` includes the BullMQ `job.id` and uses `ON CONFLICT (job_id) DO NOTHING`. If BullMQ retries a job that already succeeded (e.g. process crash before the job was marked complete), the second insert is a safe no-op. No duplicate audit entries, ever.
+
+### Scheduler delegates to notification queue
+
+The scheduler processor doesn't send emails directly — it only enqueues a notification job when the delay expires. This keeps retry behaviour isolated: if Resend is down when the scheduler fires, the scheduler job succeeds and the notification job handles its own retries independently.
+
+### Append-only activity log
+
+`task_activity` rows are never updated, only inserted. Every status change, reassignment, or edit creates a new row. This gives you a reliable audit trail that can answer "who changed this, and from what to what" for any task at any point in its history.
+
+### Validation at the boundary
+
+Zod schemas sit at the edge of the system, in controllers, before anything touches the database. Invalid input is rejected with a clear error immediately. Nothing downstream needs to defensively check for null or undefined.
+
+The same pattern applies to environment variables at startup. If `DATABASE_URL` is missing, the server exits immediately with a readable error — not a cryptic crash when the first query runs.
+
+### Transactions for multi-step writes
+
+Any operation that touches more than one table is wrapped in a `BEGIN / COMMIT / ROLLBACK` block. The clearest example is creating a project — two inserts happen (into `projects` and `project_members`). If the second fails, the first is rolled back. The database never ends up in a half-written state.
+
+### 404 instead of 403 for inaccessible resources
+
+When a non-member tries to access a project, the API returns `404 Not Found`, not `403 Forbidden`. A `403` would confirm that a project with that ID exists — which is information an outsider shouldn't have. The `404` response is identical whether the project doesn't exist or the user just has no access.
+
+---
+
 ## Detailed documentation
 
 Each doc covers design decisions and technical implementation in depth for its specific area.
@@ -440,3 +546,4 @@ Each doc covers design decisions and technical implementation in depth for its s
 | [`docs/Redis.md`](docs/Redis.md) | Caching architecture, `withCache`, cache key design, invalidation strategy, ACL, testing |
 | [`docs/Docker.md`](docs/Docker.md) | Dockerfile design, compose file strategy, entrypoint, boot sequence, dev vs prod differences |
 | [`docs/CI-Pipeline.md`](docs/CI-Pipeline.md) | Pipeline structure, job breakdown, reusable workflows, security decisions, branch behaviour |
+| [`docs/BullMQ.md`](docs/BullMQ.md) | Queue design, worker architecture, retry strategy, DLQ, scheduler pattern, email templates |
