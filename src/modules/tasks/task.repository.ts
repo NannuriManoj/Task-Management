@@ -107,22 +107,19 @@ export async function getMyTasks(userId: string) {
 
 // GET TASK ACTIVITY
 export async function getTaskActivity(task_id: string, project_id: string) {
-    const { rows } = await dbPool.query(
-        `SELECT 
-            ta.action,
-            ta.old_value,
-            ta.new_value,
-            ta.created_at,
-            u.name AS user_name
-         FROM task_activity ta
-         JOIN users u ON u.id = ta.user_id
-         WHERE ta.task_id = $1
-         AND ta.project_id = $2
-         ORDER BY ta.created_at DESC`,
-        [task_id, project_id]
-    );
-
-    return rows;
+  const { rows } = await dbPool.query(
+    `SELECT
+      ta.action,
+      ta.meta,
+      ta.occurred_at,
+      ta.actor_name
+     FROM task_activity ta
+     WHERE ta.task_id = $1
+     AND ta.project_id = $2
+     ORDER BY ta.occurred_at DESC`,
+    [task_id, project_id]
+  );
+  return rows;
 }
 
 // INSERT ACTIVITY
@@ -143,12 +140,41 @@ export async function insertActivity(
 
 // GET TASK FOR PERMISSION CHECK (creator_id, assignee_id)
 export async function getTaskForUpdatePermission(task_id: string, project_id: string) {
-    const { rows } = await dbPool.query(
-        `SELECT creator_id, assignee_id
-         FROM tasks
-         WHERE id = $1 AND project_id = $2`,
-        [task_id, project_id]
-    );
+  const { rows } = await dbPool.query(
+    `SELECT 
+      t.creator_id,
+      t.assignee_id,
+      t.title,
+      t.status,
+      t.due_date,
+      creator.name   AS creator_name,
+      creator.email  AS creator_email,
+      assignee.name  AS assignee_name,
+      assignee.email AS assignee_email
+     FROM tasks t
+     JOIN  users creator  ON creator.id  = t.creator_id
+     LEFT JOIN users assignee ON assignee.id = t.assignee_id
+     WHERE t.id = $1 AND t.project_id = $2`,
+    [task_id, project_id]
+  );
+  return rows[0] as {
+    creator_id:     string;
+    assignee_id:    string | null;
+    title:          string;
+    status:         string;
+    due_date:       Date | null;
+    creator_name:   string;
+    creator_email:  string;
+    assignee_name:  string | null;
+    assignee_email: string | null;
+  } | undefined;
+}
 
-    return rows[0];
+// GET USER BY ID - for notification payloads
+export async function getUserById(userId: string) {
+  const { rows } = await dbPool.query(
+    `SELECT id, name, email FROM users WHERE id = $1`,
+    [userId]
+  );
+  return rows[0] as { id: string; name: string; email: string } | undefined;
 }

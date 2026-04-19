@@ -3,10 +3,10 @@ import { dbPool } from "../../config/databases.js";
 // Check project ownership
 export async function getProjectByOwner(project_id: string, userId: string) {
     const { rows } = await dbPool.query(
-        `SELECT id FROM projects WHERE id = $1 AND owner_id = $2`,
+        `SELECT id, name FROM projects WHERE id = $1 AND owner_id = $2`,
         [project_id, userId]
     );
-    return rows[0];
+    return rows[0] as { id: string; name: string } | undefined;
 }
 
 // Get all members
@@ -24,10 +24,10 @@ export async function getProjectMembers(project_id: string) {
 // Find user by email
 export async function findUserByEmail(email: string) {
     const { rows } = await dbPool.query(
-        `SELECT id FROM users WHERE email = $1`,
+        `SELECT id, name, email FROM users WHERE email = $1`,
         [email]
     );
-    return rows[0];
+    return rows[0] as { id: string, name: string; email: string } | undefined;
 }
 
 // Check existing membership
@@ -68,4 +68,13 @@ export async function removeMember(project_id: string, user_id: string) {
         [project_id, user_id]
     );
     return rowCount;
+}
+
+// Get user by ID
+export async function getUserById(userId: string) {
+  const { rows } = await dbPool.query(
+    `SELECT id, name, email FROM users WHERE id = $1`,
+    [userId]
+  );
+  return rows[0] as { id: string; name: string; email: string } | undefined;
 }
