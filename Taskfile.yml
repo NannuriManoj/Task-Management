@@ -100,8 +100,14 @@ tasks:
       - rm -rf dist
       - task: build
 
-  # Docker
+  verify:entrypoints:
+    desc: Verify both API and worker entrypoints exist in dist/
+    cmds:
+      - test -f dist/index.js || (echo "dist/index.js missing" && exit 1)
+      - test -f dist/workers/index.js || (echo "dist/workers/index.js missing" && exit 1)
+      - echo "Both entrypoints verified"
 
+  # Docker
   docker:build:
     desc: Build the Docker image locally for testing
     cmds:
@@ -113,14 +119,17 @@ tasks:
       - docker run --rm --env-file .env -p 3000:3000 {{.IMAGE_NAME}}:local
 
   # Database
-
   migrate:
     desc: Run pending database migrations
     cmds:
       - npm run migrate
 
-  # Composite tasks - used in CI pipeline stages
+  copy:migrations:
+    desc: Copy SQL migration files into dist/ after build
+    cmds:
+      - cp -r src/db/migrations dist/db/migrations
 
+  # Composite tasks - used in CI pipeline stages
   ci:typecheck:
     desc: CI entrypoint for type checking
     cmds:
@@ -140,3 +149,5 @@ tasks:
     desc: CI entrypoint for building
     cmds:
       - task: build
+      - task: copy:migrations
+      - task: verify:entrypoints
