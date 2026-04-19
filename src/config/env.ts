@@ -13,6 +13,7 @@ if (existsSync(envFile)) {
 }
 
 const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.url(),
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default("0.0.0.0"),
