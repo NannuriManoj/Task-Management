@@ -115,86 +115,87 @@ This means: no SQL in controllers, no HTTP concepts in services, no permission c
 
 ```
 task-api/
-├── src/
-│   ├── admin/
-│   │   └── bull-board.ts           # Bull Board dashboard (dev only)
-│   ├── config/
-│   │   ├── databases.ts            # PostgreSQL connection pool
-│   │   ├── env.ts                  # Zod-validated env — crashes fast if anything missing
-│   │   └── redis.ts                # ioredis clients — general + BullMQ
-│   ├── db/
-│   │   ├── migrations/             # SQL files, run in order, tracked in _migrations
-│   │   │   ├── 001_create_users.sql
-│   │   │   ├── 002_create_projects.sql
-│   │   │   ├── 003_create_project_members.sql
-│   │   │   ├── 004_create_tasks.sql
-│   │   │   └── 005_task_activity_logs.sql
-│   │   ├── queries/
-│   │   │   └── members.ts          # Shared membership check helper
-│   │   └── migrate.ts              # Migration runner
-│   ├── middleware/
-│   │   └── authenticate.ts         # JWT preHandler — verifies token before route runs
-│   ├── modules/
-│   │   ├── auth/                   # register, login, me
-│   │   ├── members/                # invite, remove, list
-│   │   ├── projects/               # CRUD + ownership
-│   │   └── tasks/                  # tasks + activity log
-│   ├── plugins/
-│   │   ├── cache.ts                # withCache utility
-│   │   └── jwt.ts                  # @fastify/jwt registration
-│   ├── queues/
-│   │   ├── config/
-│   │   │   └── defaults.ts         # Shared BullMQ job options
-│   │   ├── types/
-│   │   │   └── jobs.ts             # Typed payloads for every queue
-│   │   ├── utils/
-│   │   │   └── jitter.ts           # Randomized delay utility
-│   │   ├── notification.queue.ts
+├── .github/                    # CI/CD workflows (GitHub Actions)
+│   ├── actions/               # Custom reusable actions
+│   │   └── setup-node/
+│   │       └── action.yml
+│   └── workflows/
+│       ├── ci.yml             # Main pipeline (lint, test, build)
+│       ├── ci-test.yml        # Test-specific workflow
+│       └── stale.yml          # Marks stale issues/PRs
+│
+├── dist/                      # Compiled TypeScript output (prod)
+│
+├── docker/                    # Docker helper scripts
+│   ├── entrypoint.sh         # Wait → migrate → start app
+│   └── wait-for-pg.sh        # Waits for PostgreSQL readiness
+│
+├── docs/                      # Detailed system design docs
+│
+├── redis/                     # Redis configs (ACL, etc.)
+│
+├── src/                       # Main application source
+│
+│   ├── admin/                 # Dev tools
+│   │   └── bull-board.ts     # Queue monitoring dashboard
+│
+│   ├── config/                # App configuration
+│   │   ├── databases.ts      # PostgreSQL connection
+│   │   ├── env.ts            # Environment validation (Zod)
+│   │   └── redis.ts          # Redis clients setup
+│
+│   ├── db/                    # Database layer
+│   │   ├── migrations/       # Raw SQL migrations
+│   │   ├── queries/          # Shared query helpers
+│   │   ├── migrate.ts        # Migration runner
+│   │   └── middleware/       # Request-level infra logic
+│   │       ├── authenticate.ts
+│   │       ├── rateLimit.ts
+│   │       └── perRouteRateLimit.ts
+│
+│   ├── modules/               # Feature-based modules
+│   │   ├── auth/
+│   │   ├── members/
+│   │   ├── projects/
+│   │   └── tasks/
+│
+│   ├── plugins/               # Fastify plugins
+│   │   ├── cache.ts          # Redis caching helper
+│   │   └── jwt.ts            # JWT plugin setup
+│
+│   ├── queues/                # BullMQ queues
+│   │   ├── config/           # Shared queue configs
+│   │   ├── types/            # Typed job payloads
 │   │   ├── activity.queue.ts
-│   │   ├── scheduler.queue.ts      # + upsertDueReminder / cancelDueReminder helpers
+│   │   ├── notification.queue.ts
+│   │   ├── scheduler.queue.ts
 │   │   ├── report.queue.ts
-│   │   ├── dlq.queue.ts            # Dead letter queue
-│   │   └── index.ts                # Barrel — single import point for the rest of the app
-│   ├── services/
+│   │   ├── dlq.queue.ts      # Dead Letter Queue
+│   │   └── index.ts          # Central export
+│
+│   ├── services/              # Business logic layer
 │   │   └── email/
-│   │       ├── resend.ts           # Resend SDK wrapper
-│   │       └── templates/
-│   │           ├── base.ts         # Layout wrapper + reusable component helpers
-│   │           └── notifications.ts # One typed function per notification type
-│   ├── workers/
-│   │   ├── processors/
-│   │   │   ├── notification.processor.ts
-│   │   │   ├── activity.processor.ts
-│   │   │   ├── scheduler.processor.ts
-│   │   │   └── report.processor.ts
-│   │   ├── shared/
-│   │   │   └── dlq-handler.ts      # Reusable DLQ + logging handler
-│   │   ├── notification.worker.ts
-│   │   ├── activity.worker.ts
-│   │   ├── scheduler.worker.ts
-│   │   ├── report.worker.ts
-│   │   └── index.ts                # Worker entrypoint — separate from API server
-│   ├── app.ts                      # Fastify app builder — registers plugins and routes
-│   └── index.ts                    # Entry point — health checks, then starts server
-├── redis/
-│   └── acl.conf                    # Redis ACL — restricts prod user to required commands only
-├── docker/
-│   ├── entrypoint.sh               # wait → migrate → start
-│   └── wait-for-pg.sh              # polls pg_isready before migrations run
-├── tests/
-│   ├── integration/
-│   │   └── database.test.ts
-│   └── setup.ts
-├── Dockerfile.dev
-├── Dockerfile.prod
-├── docker-compose.yml
-├── docker-compose.dev.yml
-├── docker-compose.prod.yml
-├── .env.example
-└── .github/
-    └── workflows/
-        ├── ci.yml
-        └── ci-test.yml
+│   │       ├── resend.ts     # Email provider wrapper
+│   │       └── templates/    # Email templates
+│
+│   ├── workers/               # Background job processors
+│   │   ├── processors/       # Actual job logic
+│   │   ├── shared/           # Shared worker utilities
+│   │   ├── *.worker.ts       # Worker entry files
+│   │   └── index.ts          # Worker bootstrap
+│
+│   ├── rateLimitHelpers.ts   # Rate limiting utilities
+│   ├── app.ts                # Fastify app builder
+│   └── index.ts              # Server entrypoint
+│
+├── tests/                    # Unit & integration tests
+│
+├── .env*                     # Environment configs
+├── docker-compose*.yml       # Container orchestration
+├── Dockerfile.*              # Build configs
+├── package.json              # Dependencies & scripts
+├── tsconfig.json             # TypeScript config
+└── README.md
 ```
 
 Each module follows the same internal structure: `routes → controller → service → repository → types`.

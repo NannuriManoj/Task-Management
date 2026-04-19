@@ -41,11 +41,11 @@ Rather than compromising either client, two separate connections are maintained.
 
 ```mermaid
 flowchart LR
-    API --> CacheClient[Redis Client (Cache)]
-    API --> QueueClient[Redis Client (BullMQ)]
+    API[API Server] --> Cache["Redis (Cache Client)"]
+    API --> Queue["Redis (BullMQ Client)"]
 
-    CacheClient --> Redis[(Redis)]
-    QueueClient --> Redis
+    Cache --> R[(Redis)]
+    Queue --> R
 ```
 
 ---
