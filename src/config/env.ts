@@ -22,9 +22,9 @@ const envSchema = z.object({
   REDIS_PORT: z.coerce.number().default(6379),
   REDIS_USERNAME: z.string().optional(),
   REDIS_PASSWORD: z.string().optional(),
-  RESEND_API_KEY: z.string(),
-  EMAIL_FROM: z.string().min(1),
-  APP_URL: z.url(),
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().min(1).optional(),
+  APP_URL: z.url().optional(),
 });
 
 export const env = envSchema.parse(process.env);
